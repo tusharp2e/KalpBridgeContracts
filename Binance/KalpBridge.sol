@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
+
 pragma solidity ^0.8.0;
 
 interface ERC1155 {
@@ -16,19 +17,15 @@ interface ERC1155 {
     function isApprovedForAll(address _owner, address _operator) external view returns (bool);
 }
 
-/**
- * @title Storage
- * @dev Store & retrieve value in a variable
- * @custom:dev-run-script ./scripts/deploy_with_ethers.ts
- */
 contract KalpBridge {
-    event TransferAndLock(address tokenSmartContract, uint256 tokenId, uint256 amount, address owner, uint256 timestamp, string status, uint256 souceChainId, uint256 destinationChainId, address receiverAddress);
+    event TransferAndLock(bytes32 txId, address tokenSmartContract, uint256 tokenId, uint256 amount, address owner, uint256 timestamp, string status, uint256 souceChainId, uint256 destinationChainId, address receiverAddress);
+    event MintAndLock(bytes32 txId, uint256 mintedTokenId, uint256 amount, uint256 timestamp, string status, uint256 sourceChainId);
+    event BurnAndRelease(bytes32 txId, uint256 mintedTokenId, uint256 amount, uint256 timestamp, string status, uint256 sourceChainId);
     event WithdrawToken(address tokenSmartContract, uint256 tokenId,uint256 amount , address caller, uint256 sourceChainId);
-    event WithdrawTokenResponse(address tokenSmartContract, address owner,uint256 tokenId, uint256 amount, uint256 sourceChainId);
-    event MintAndLock(uint256 mintedTokenId, uint256 amount, uint256 timestamp, string status, uint256 sourceChainId);
-    event BurnAndRelease(uint256 mintedTokenId, uint256 amount, uint256 timestamp, string status, uint256 sourceChainId);
+    event WithdrawTokenResponse(bytes32 _txId, address tokenSmartContract, address owner,uint256 tokenId, uint256 amount, uint256 sourceChainId);
 
-    uint256 sourceChainId = 1;
+    uint256 public sourceChainId = 1;
+    uint256 public txNonce = 0;
     address superAdmin;
     address mintSmartContract; 
     mapping(address => bool) public admins;
@@ -43,7 +40,7 @@ contract KalpBridge {
         _;
     }
 
-    constructor() public {
+    constructor() {
         superAdmin = msg.sender;
     }
 
@@ -71,11 +68,13 @@ contract KalpBridge {
             uint256 bridgeBeforeBalance = erc1155.balanceOf(address(this), _tokenId);
             erc1155.safeTransferFrom(msg.sender, address(this), _tokenId, _amount, "0x");
             uint256 bridgeAfterBalance = erc1155.balanceOf(address(this), _tokenId);
+            bytes32 txId = keccak256(abi.encodePacked(block.number, block.timestamp, msg.sender, txNonce));
             require(bridgeAfterBalance == bridgeBeforeBalance + _amount, "Amount is not being transferred to Bridge"); 
-            emit TransferAndLock(_tokenContractAddress, _tokenId, _amount, msg.sender, block.timestamp, "temporaryLocked", sourceChainId, _destinationChainId, _receiverAddress);
+            emit TransferAndLock(txId, _tokenContractAddress, _tokenId, _amount, msg.sender, block.timestamp, "temporaryLocked", sourceChainId, _destinationChainId, _receiverAddress);
     }
 
     function mintAndLock(
+        bytes32 _txId,
         uint256 _tokenId,
         uint256 _amount ) onlyAdmin public {
             ERC1155 erc1155 = ERC1155(mintSmartContract);
@@ -83,10 +82,11 @@ contract KalpBridge {
             _mint(_tokenId, _amount);
             uint bridgeAfterBalance = erc1155.balanceOf(address(this), _tokenId);
             require(bridgeAfterBalance == bridgeBeforeBalance + _amount, "Not minted"); 
-            emit MintAndLock(_tokenId, _amount, block.timestamp, "temporaryLocked", sourceChainId);
+            emit MintAndLock(_txId, _tokenId, _amount, block.timestamp, "temporaryLocked", sourceChainId);
     }
 
     function burnAndRelease(
+        bytes32 _txId,
         uint256 _tokenId,
         uint256 _amount ) onlyAdmin public {
             ERC1155 erc1155 = ERC1155(mintSmartContract);
@@ -94,7 +94,7 @@ contract KalpBridge {
             _burn(_tokenId, _amount);
             uint256 bridgeAfterBalance = erc1155.balanceOf(address(this), _tokenId);
             require(bridgeAfterBalance == bridgeBeforeBalance - _amount, "Not burned"); 
-            emit BurnAndRelease(_tokenId, _amount, block.timestamp, "burned", sourceChainId);
+            emit BurnAndRelease(_txId, _tokenId, _amount, block.timestamp, "burned", sourceChainId);
     }
 
     function withdrawToken(
@@ -105,6 +105,7 @@ contract KalpBridge {
     }
 
     function withdrawTokenResponse(
+        bytes32 _txId,
         address _tokenContractAddress,
         address _owner,
         uint256 _tokenId,
@@ -114,7 +115,7 @@ contract KalpBridge {
         erc1155.safeTransferFrom(address(this), _owner, _tokenId, _amount, "0x");
         uint256 bridgeAfterBalance = erc1155.balanceOf(_owner, _tokenId);
         require(bridgeBeforeBalance + _amount == bridgeAfterBalance, "Not transaferred, failed");
-        emit WithdrawTokenResponse(_tokenContractAddress, _owner,_tokenId, _amount, sourceChainId);
+        emit WithdrawTokenResponse(_txId, _tokenContractAddress, _owner,_tokenId, _amount, sourceChainId);
     }
 
     function onERC1155Received(address _operator, address _from, uint256 _id, uint256 _value, bytes memory _data) public virtual returns (bytes4) {
