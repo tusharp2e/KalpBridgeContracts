@@ -14,6 +14,8 @@ This repo contains contracts and postman collection. Contract of UserNFTs, KalpN
 
 ### Deployed Contract on Avalanche Testnet ###
 
+To perform deployment of Avalanche KalpNFTs and UserNFTs contract, make sure to have remix compiler version v0.8.1 
+
 **UserNFTs**:  <br/>
 **KalpNFTs**:  <br/>
 **KalpBridge**:  <br/>
