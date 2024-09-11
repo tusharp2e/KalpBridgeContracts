@@ -11,7 +11,7 @@ contract UserNFTs is ERC1155 {
         _mint(msg.sender, 0, 1, "");
     }
 
-    function mint(uint256 _amount) public{
+    function mint(uint256 _amount) public {
         _mint(msg.sender, tokenId, _amount, "");
         tokenId++;
     }
